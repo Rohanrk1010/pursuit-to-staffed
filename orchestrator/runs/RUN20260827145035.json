@@ -1,0 +1,190 @@
+{
+  "runId": "RUN20260827145035",
+  "startedAt": "2026-08-27T09:20:35.228Z",
+  "status": "failed",
+  "opportunityId": "006aj00000cURhdAAG",
+  "steps": [
+    {
+      "n": 1,
+      "name": "trigger.get_opportunity",
+      "status": "ok",
+      "startedAt": "2026-08-27T09:20:35.231Z",
+      "input": {
+        "opportunityId": "006aj00000cURhdAAG",
+        "eventPayload": {
+          "CurrencyIsoCode__c": "",
+          "CreatedById": "005aj00000c4JdNAAU",
+          "Amount__c": 2400000,
+          "CreatedDate": "2026-08-27T09:20:46.644Z",
+          "OpportunityName__c": "Falcon 4",
+          "StartDate__c": "2026-09-01",
+          "RequiredSkills__c": "S/4 Finance;BTP CAP;Data Eng",
+          "OpportunityId__c": "006aj00000cURhdAAG",
+          "TeamSize__c": 4,
+          "AccountName__c": "GlobalCo Financial"
+        }
+      },
+      "ms": 913,
+      "output": {
+        "opportunityId": "006aj00000cURhdAAG",
+        "name": "Falcon 4",
+        "accountName": "GlobalCo Financial",
+        "amount": 2400000,
+        "currency": "USD",
+        "closeDate": "2026-08-21",
+        "stage": "Closed Won",
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "teamSize": 4,
+        "staffingStatus": null
+      }
+    },
+    {
+      "n": 2,
+      "name": "engagement.create_engagement",
+      "status": "ok",
+      "startedAt": "2026-08-27T09:20:36.149Z",
+      "input": {
+        "engagementId": "ENG20260827145035"
+      },
+      "ms": 2799,
+      "output": {
+        "engagementId": "ENG20260827145035",
+        "status": "CREATED",
+        "staffingStatus": "Awaiting assignment",
+        "wbsElement": "ENG20260827145035.001",
+        "sourceOpportunityId": "006aj00000cURhdAAG",
+        "fioriUrl": "https://my414806.s4hana.cloud.sap/ui#EnterpriseProject-display&/EnterpriseProject(Project='ENG20260827145035')"
+      }
+    },
+    {
+      "n": 3,
+      "name": "intel.check_availability",
+      "status": "ok",
+      "startedAt": "2026-08-27T09:20:38.950Z",
+      "input": {
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "endDate": "2027-02-28"
+      },
+      "ms": 1603,
+      "output": {
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "endDate": "2027-02-28",
+        "consultants": [
+          {
+            "userId": "103420",
+            "name": "LINDQVIST T",
+            "role": "ARCHITECT",
+            "skillsFit": 97,
+            "availablePct": 60,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103417",
+            "name": "A MEHTA",
+            "role": "ENG_MANAGER",
+            "skillsFit": 95,
+            "availablePct": 0,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103418",
+            "name": "SILVA R.",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 92,
+            "availablePct": 0,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103419",
+            "name": "OKAFOR J",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 88,
+            "availablePct": 0,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103421",
+            "name": "NAIR P",
+            "role": "ANALYST",
+            "skillsFit": 84,
+            "availablePct": 0,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "n": 3,
+      "name": "intel.propose_team (AI draft)",
+      "status": "failed",
+      "startedAt": "2026-08-27T09:20:40.556Z",
+      "input": {
+        "consultants": 5
+      },
+      "ms": 6779,
+      "error": "Proposal invalid after retry: [\n  {\n    \"origin\": \"array\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"team\"\n    ],\n    \"message\": \"Too small: expected array to have >=1 items\"\n  }\n]\n{\n  \"team\": [],\n  \"rationale\": \"None of the consultants are sufficiently available to meet the requirements of the Falcon 4 opportunity. The best-fit consultant, LINDQVIST T, is only 60% available, which is below the threshold for default selection.\",\n  \"tradeoffFlags\": [\"LINDQVIST T (60% available) was not selected due to insufficient availability.\"]\n}"
+    }
+  ],
+  "engagementId": "ENG20260827145035",
+  "finishedAt": "2026-08-27T09:20:47.337Z"
+}
