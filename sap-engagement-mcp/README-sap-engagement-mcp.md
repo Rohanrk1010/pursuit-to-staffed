@@ -52,7 +52,7 @@ You should see the three tools listed; run `create_engagement` with the demo dat
 ## Before the first real call (TODOs in the code)
 1. Communication arrangement for **SAP_COM_0308** exists; API host + communication user in `.env`
 2. Property names checked against `$metadata` of `A_EnterpriseProject` / `A_EnterpriseProjectElement`
-3. Custom field "Staffing Status" created in the Custom Fields app, enabled for the API and the Fiori app; technical name in `S4_STAFFING_FIELD`
+3. Custom field "Staffing Status" created in the Custom Fields app, assigned to the project category used by `S4_PROJECT_PROFILE`, enabled for `API_ENTERPRISE_PROJECT_SRV` and the Fiori app; technical name in `S4_STAFFING_FIELD`. Its allowed values must include `STAFFED`.
 4. Project ID format allows `ENG-2026-0147` (else adjust the demo data sheet)
 5. Fiori deep link copied from the real app into `fioriUrl()`
 

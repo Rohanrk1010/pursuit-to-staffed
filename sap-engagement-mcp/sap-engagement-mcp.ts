@@ -10,7 +10,7 @@
  *          (communication scenario SAP_COM_0308, service API_ENTERPRISE_PROJECT_SRV;v=0002)
  *
  * Run : npm i @modelcontextprotocol/sdk express zod && npx tsx sap-engagement-mcp.ts
- * Test: npx @modelcontextprotocol/inspector  -> Streamable HTTP, URL http://localhost:8080/mcp,
+ * Test: npx @modelcontextprotocol/inspector  -> Streamable HTTP, URL http://localhost:8082/mcp,
  *       header  Authorization: Bearer <MCP_TOKEN>
  *
  * Every "TODO" below must be confirmed against the tenant ($metadata / Custom Fields app)
@@ -43,7 +43,9 @@ const S4 = {
 };
 const SERVICE = "/sap/opu/odata/sap/API_ENTERPRISE_PROJECT_SRV;v=0002";
 const MCP_TOKEN = env("MCP_TOKEN");            // shared secret; only the orchestrator has it
-const PORT = Number(process.env.PORT ?? 8080);
+const PORT = Number(process.env.PORT ?? 8082
+
+);
 
 // ---------------------------------------------------------------------------
 // Thin OData v2 client (basic auth + CSRF token for writes)
@@ -64,8 +66,9 @@ async function s4(method: "GET" | "POST" | "PATCH", path: string, body?: unknown
   const headers: Record<string, string> = { Authorization: basicAuth, Accept: "application/json" };
   if (method !== "GET") {
     const { token, cookie } = await csrf();
-    Object.assign(headers, { "x-csrf-token": token, Cookie: cookie, "Content-Type": "application/json" });
+    Object.assign(headers, { "x-csrf-token": token, Cookie: cookie, "Content-Type": "application/json"  });
   }
+  if (method === "PATCH") headers["If-Match"] = "*";
   const r = await fetch(`${S4.apiHost}${SERVICE}${path}`, {
     method,
     headers,
@@ -130,7 +133,7 @@ function buildServer(): McpServer {
           ResponsibleCostCenter: S4.costCenter,
           ProfitCenter: S4.profitCenter,
           ProjectCurrency: a.currency,
-          [S4.staffingField]: "Awaiting assignment",
+          //[S4.staffingField]: "Awaiting assignment",
           to_EnterpriseProjectElement: [
             {
               ProjectElement: a.wbsElement,
@@ -166,8 +169,9 @@ function buildServer(): McpServer {
       try {
         const d = await s4(
           "GET",
-          `/A_EnterpriseProject('${encodeURIComponent(engagementId)}')?$expand=to_EnterpriseProjectElement`,
+          `/A_EnterpriseProject?$filter=Project eq '${encodeURIComponent(engagementId)}'&$expand=to_EnterpriseProjectElement`,
         );
+        const p = d?.results?.[0] ?? d;
         return ok({
           engagementId: d.Project,
           description: d.ProjectDescription,
@@ -202,10 +206,25 @@ function buildServer(): McpServer {
     },
     async (a) => {
       try {
-        await s4("PATCH", `/A_EnterpriseProject('${encodeURIComponent(a.engagementId)}')`, {
-          [S4.staffingField]: "STAFFED",
-          // TODO (optional): second custom field with the team names, e.g. YY1_StaffedTeam_PTD
-        });
+        const g = await s4("GET", `/A_EnterpriseProject?$filter=Project eq '${encodeURIComponent(a.engagementId)}'&$select=ProjectUUID`);
+        const uuid = g?.results?.[0]?.ProjectUUID ?? g?.d?.results?.[0]?.ProjectUUID;
+        if (!uuid) throw new Error(`S/4 project ${a.engagementId} has no ProjectUUID`);
+        try {
+          await s4("PATCH", `/A_EnterpriseProject(ProjectUUID=guid'${encodeURIComponent(uuid)}')`, {
+            [S4.staffingField]: "STAFFED",
+            // TODO (optional): second custom field with the team names, e.g. YY1_StaffedTeam_PTD
+          });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          if (message.includes("/S4PPM/CRUD/278") || message.includes("Custom fields for project header")) {
+            throw new Error(
+              `S/4 rejected custom field ${S4.staffingField} for project ${a.engagementId}. ` +
+              "Assign this field to the project's category in Custom Fields, enable it for API_ENTERPRISE_PROJECT_SRV, " +
+              "and ensure the field value contains STAFFED.",
+            );
+          }
+          throw e;
+        }
         return ok({
           engagementId: a.engagementId,
           staffingStatus: "STAFFED",

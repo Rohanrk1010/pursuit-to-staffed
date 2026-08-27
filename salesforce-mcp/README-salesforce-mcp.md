@@ -60,3 +60,43 @@ header `Authorization: Bearer <MCP_TOKEN>`. Run `get_opportunity` with the Proje
 ## Definition of done (milestone one for MCP-1)
 `get_opportunity` returns Project Falcon with the three custom fields; `post_chatter_update` shows on the record.
 Then hand Rohan the URL + token.
+
+## Salesforce setup (dev org: orgfarm-27dfc46293-dev-ed)
+ 
+External Client App
+- JWT Bearer Flow enabled; certificate.crt from salesforce-mcp/ uploaded
+- Consumer Key stored in .env as SF_CLIENT_ID
+- Policies: pre-authorized profile "Minimum Access - API Only Integrations"
+  and permission set "BTP Integration Permissions"
+ 
+Integration user: BTPIntegration@globalco.sf
+- User License: Salesforce Integration
+- Profile: Minimum Access - API Only Integrations
+- Permission Set License: Salesforce API Integration (required, see note below)
+- Permission sets assigned: BTP Integration Permissions, BTP standard objects
+ 
+Permission set "BTP standard objects" (License = Salesforce API Integration)
+- Opportunity: Read and Edit; all fields Read; Staffing_Status__c Edit
+- Account: Read
+ 
+Custom fields on Opportunity
+- Required_Skills__c, Start_Date__c, Team_Size__c
+- Staffing_Status__c (Text field, not a picklist; any value is accepted,
+  so the orchestrator must control which statuses it writes)
+ 
+Important note
+- For a user on the Salesforce Integration license, standard-object permissions
+  apply only when granted through a permission set created with
+  License = "Salesforce API Integration". Granted through any other permission
+  set, they save without error but have no effect, and queries fail with
+  "sObject type 'Opportunity' is not supported".
+- After any permission change, restart salesforce-mcp.ts so it logs in again.
+ 
+MCP server
+- Endpoint: http://localhost:8081/mcp (Streamable HTTP)
+- Header: Authorization: Bearer <MCP_TOKEN> (capital B required)
+- Health check: http://localhost:8081/health
+ 
+Test record: Express Logistics Portable Truck Generators (006aj00000bS4MuAAK)
+Verified on 26 Aug 2026: get_opportunity, update_opportunity_status, post_chatter_update
+ 

@@ -7,10 +7,9 @@
  *   get_consultant_profile -> User + availability row
  *
  * Backend: real SuccessFactors tenant, OData v2 (/odata/v2), two custom MDF objects:
- *   cust_Availability : externalCode(=userId), cust_role, cust_skills ("S/4 Finance:98;BTP CAP:95;Data Eng:92"),
- *                       cust_startDate, cust_endDate, cust_availablePct
- *   cust_Assignment   : externalCode(=engagementId-userId), cust_userId, cust_engagementId,
- *                       cust_startDate, cust_endDate, cust_utilizationPct
+ *   cust_ConsultantAvailability : cust_consultant (user ID), cust_role, cust_Skills, cust_skillsFit,
+ *                       cust_availability, cust_AvailabilityStartDate, cust_AvailabilityEndDate
+ *   cust_ConsultantAssignment   : cust_Consultant, cust_Engagement, cust_StartDate, cust_EndDate, cust_Utilization
  *   (field names are configurable below — match them to what you create in Configure Object Definitions)
  *
  * Auth: OAuth 2.0 SAML bearer (Manage OAuth2 Client Applications -> client_id + X.509 private key),
@@ -21,6 +20,7 @@
  *       header  Authorization: Bearer <MCP_TOKEN>
  */
 import express, { type Request, type Response } from "express";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -41,23 +41,31 @@ const SFSF = {
   apiUser: env("SFSF_API_USER"),                       // API user id (oauth) or user (basic)
   password: process.env.SFSF_PASSWORD ?? "",           // basic only
   clientId: process.env.SFSF_CLIENT_ID ?? "",          // oauth only: from Manage OAuth2 Client Applications
-  privateKey: process.env.SFSF_PRIVATE_KEY ?? "",      // oauth only: PEM body without header/footer lines
-  availabilityEntity: env("SFSF_AVAILABILITY_ENTITY", "cust_Availability"),
-  assignmentEntity: env("SFSF_ASSIGNMENT_ENTITY", "cust_Assignment"),
+  privateKey: (process.env.SFSF_PRIVATE_KEY_PATH
+    ? readFileSync(process.env.SFSF_PRIVATE_KEY_PATH, "utf8")
+    : (process.env.SFSF_PRIVATE_KEY ?? "")).replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""), // oauth only
+  availabilityEntity: env("SFSF_AVAILABILITY_ENTITY", "cust_ConsultantAvailability"),
+  assignmentEntity: env("SFSF_ASSIGNMENT_ENTITY", "cust_ConsultantAssignment"),
 };
 const MCP_TOKEN = env("MCP_TOKEN");
 const PORT = Number(process.env.PORT ?? 8083);
 
-// Field names of the two MDF objects — TODO: match to your object definitions
+// Field names of the two MDF objects (confirmed against the live tenant, 26 Aug)
 const F = {
-  role: "cust_role",
-  skills: "cust_skills",
-  start: "cust_startDate",
-  end: "cust_endDate",
-  availablePct: "cust_availablePct",
-  userId: "cust_userId",
-  engagementId: "cust_engagementId",
-  utilizationPct: "cust_utilizationPct",
+  // cust_ConsultantAvailability
+  userId: "cust_consultant",               // SF user ID, e.g. "103417"
+  role: "cust_role",                       // picklist code, e.g. ENG_MANAGER, SR_CONSULTANT
+  skills: "cust_Skills",                   // "S/4 Finance, BTP CAP, Data Eng"
+  skillsFit: "cust_skillsFit",             // stored number, e.g. "95"
+  availablePct: "cust_availability",       // stored number, e.g. "100"
+  start: "cust_AvailabilityStartDate",
+  end: "cust_AvailabilityEndDate",
+  // cust_ConsultantAssignment (confirmed 26 Aug) — externalCode is auto-numbered, so we never send it
+  asgConsultant: "cust_Consultant",
+  asgEngagementId: "cust_Engagement",
+  asgStart: "cust_StartDate",
+  asgEnd: "cust_EndDate",
+  asgUtilizationPct: "cust_Utilization",
 };
 
 // ---------------------------------------------------------------------------
@@ -67,7 +75,8 @@ let token: { value: string; expiresAt: number } | null = null;
 
 async function authHeader(): Promise<string> {
   if (SFSF.authMode === "basic") {
-    return "Basic " + Buffer.from(`${SFSF.apiUser}@${SFSF.companyId}:${SFSF.password}`).toString("base64");
+    const login = SFSF.apiUser.includes("@") ? SFSF.apiUser : `${SFSF.apiUser}@${SFSF.companyId}`;
+    return "Basic " + Buffer.from(`${login}:${SFSF.password}`).toString("base64");
   }
   if (token && Date.now() < token.expiresAt) return `Bearer ${token.value}`;
 
@@ -127,24 +136,6 @@ const fromSfDate = (v?: string): string | null => {
 };
 const filterDate = (isoDate: string) => `datetime'${isoDate}T00:00:00'`;
 
-// "S/4 Finance:98;BTP CAP:95;Data Eng:92" -> { "s/4 finance": 98, ... }
-const parseSkills = (s: string): Record<string, number> =>
-  Object.fromEntries(
-    String(s ?? "")
-      .split(";")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((p) => {
-        const i = p.lastIndexOf(":");
-        return [p.slice(0, i).trim().toLowerCase(), Number(p.slice(i + 1)) || 0];
-      }),
-  );
-
-const skillsFit = (skills: Record<string, number>, required: string[]) =>
-  required.length === 0
-    ? 0
-    : Math.round(required.reduce((sum, k) => sum + (skills[k.toLowerCase()] ?? 0), 0) / required.length);
-
 // MDF upsert: POST /upsert with __metadata.uri = entity name, key + fields in the body
 const upsert = (entity: string, row: Record<string, unknown>) =>
   odata("POST", "/upsert", { __metadata: { uri: entity }, ...row });
@@ -176,27 +167,38 @@ function buildServer(): McpServer {
     },
     async ({ requiredSkills, startDate, endDate }) => {
       try {
-        const filter = `${F.start} le ${filterDate(startDate)} and ${F.end} ge ${filterDate(endDate)}`;
+        // available at the project start date (rows whose window covers startDate)
+        const filter = `${F.start} le ${filterDate(startDate)} and ${F.end} ge ${filterDate(startDate)}`;
         const res = await odata(
           "GET",
           `/${SFSF.availabilityEntity}?$filter=${encodeURIComponent(filter)}&$format=json`,
         );
         const rows: any[] = res.d?.results ?? [];
-        const ranked = rows
-          .map((r) => {
-            const skills = parseSkills(r[F.skills]);
+        const ranked = await Promise.all(
+          rows.map(async (r) => {
+            const userId = String(r[F.userId] ?? r.externalCode);
+            let name: string | null = null;
+            try {
+              const u = await odata("GET", `/User('${encodeURIComponent(userId)}')?$select=firstName,lastName&$format=json`);
+              name = `${u.d?.firstName ?? ""} ${u.d?.lastName ?? ""}`.trim() || null;
+            } catch {
+              /* name is optional */
+            }
+            const availablePct = Number(r[F.availablePct] ?? 0);
             return {
-              userId: r.externalCode,
-              role: r[F.role],
-              skillsFit: skillsFit(skills, requiredSkills),
-              availablePct: Number(r[F.availablePct] ?? 0),
-              skills,
+              userId,
+              name,
+              role: r[F.role] ?? null,
+              skillsFit: Number(r[F.skillsFit] ?? 0),
+              availablePct,
+              skills: String(r[F.skills] ?? "").split(",").map((x: string) => x.trim()).filter(Boolean),
               availableFrom: fromSfDate(r[F.start]),
               availableTo: fromSfDate(r[F.end]),
-              flags: Number(r[F.availablePct] ?? 0) < 80 ? ["partial_availability"] : [],
+              flags: availablePct < 80 ? ["partial_availability"] : [],
             };
-          })
-          .sort((a, b) => b.skillsFit - a.skillsFit || b.availablePct - a.availablePct);
+          }),
+        );
+        ranked.sort((a, b) => b.skillsFit - a.skillsFit || b.availablePct - a.availablePct);
         return ok({ requiredSkills, startDate, endDate, consultants: ranked });
       } catch (e) {
         return fail(e);
@@ -229,19 +231,23 @@ function buildServer(): McpServer {
       try {
         const created: Array<{ userId: string; assignmentId: string; utilizationPct: number }> = [];
         for (const m of team) {
-          const assignmentId = `${engagementId}-${m.userId}`;
-          await upsert(SFSF.assignmentEntity, {
-            externalCode: assignmentId,
-            [F.userId]: m.userId,
-            [F.engagementId]: engagementId,
-            [F.start]: toSfDate(startDate),
-            [F.end]: toSfDate(endDate),
-            [F.utilizationPct]: m.allocationPct,
+          // externalCode is auto-numbered on this object: omit it and let SuccessFactors assign one
+          const ins = await upsert(SFSF.assignmentEntity, {
+            [F.asgConsultant]: m.userId,
+            [F.asgEngagementId]: engagementId,
+            [F.asgStart]: toSfDate(startDate),
+            [F.asgEnd]: toSfDate(endDate),
+            [F.asgUtilizationPct]: String(m.allocationPct),
           });
-          // reduce availability for the same period
-          const cur = await odata("GET", `/${SFSF.availabilityEntity}('${encodeURIComponent(m.userId)}')?$format=json`);
-          const remaining = Math.max(0, Number(cur.d?.[F.availablePct] ?? 0) - m.allocationPct);
-          await upsert(SFSF.availabilityEntity, { externalCode: m.userId, [F.availablePct]: remaining });
+          const assignmentId = String(ins?.d?.[0]?.key ?? ins?.d?.key ?? `${engagementId}-${m.userId}`);
+          // reduce availability on that consultant's availability row (found by consultant, not by key)
+          const q = `${F.userId} eq '${m.userId}'`;
+          const cur = await odata("GET", `/${SFSF.availabilityEntity}?$filter=${encodeURIComponent(q)}&$format=json`);
+          const row = cur.d?.results?.[0];
+          if (row) {
+            const remaining = Math.max(0, Number(row[F.availablePct] ?? 0) - m.allocationPct);
+            await upsert(SFSF.availabilityEntity, { externalCode: row.externalCode, [F.availablePct]: String(remaining) });
+          }
           created.push({ userId: m.userId, assignmentId, utilizationPct: m.allocationPct });
         }
         return ok({
@@ -267,20 +273,23 @@ function buildServer(): McpServer {
     async ({ userId }) => {
       try {
         const id = encodeURIComponent(userId);
+        const q = `${F.userId} eq '${userId}'`;
         const [u, a] = await Promise.all([
           odata("GET", `/User('${id}')?$select=userId,firstName,lastName,title,email&$format=json`),
-          odata("GET", `/${SFSF.availabilityEntity}('${id}')?$format=json`),
+          odata("GET", `/${SFSF.availabilityEntity}?$filter=${encodeURIComponent(q)}&$format=json`),
         ]);
+        const row = a.d?.results?.[0] ?? {};
         return ok({
           userId,
           name: `${u.d?.firstName ?? ""} ${u.d?.lastName ?? ""}`.trim(),
           title: u.d?.title ?? null,
           email: u.d?.email ?? null,
-          role: a.d?.[F.role] ?? null,
-          skills: parseSkills(a.d?.[F.skills]),
-          availablePct: Number(a.d?.[F.availablePct] ?? 0),
-          availableFrom: fromSfDate(a.d?.[F.start]),
-          availableTo: fromSfDate(a.d?.[F.end]),
+          role: row[F.role] ?? null,
+          skills: String(row[F.skills] ?? "").split(",").map((x: string) => x.trim()).filter(Boolean),
+          skillsFit: Number(row[F.skillsFit] ?? 0),
+          availablePct: Number(row[F.availablePct] ?? 0),
+          availableFrom: fromSfDate(row[F.start]),
+          availableTo: fromSfDate(row[F.end]),
         });
       } catch (e) {
         return fail(e);

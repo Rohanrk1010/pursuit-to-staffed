@@ -15,6 +15,7 @@
  *       header  Authorization: Bearer <MCP_TOKEN>
  */
 import { createSign } from "node:crypto";
+import { readFileSync } from "node:fs";
 import express, { type Request, type Response } from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -30,12 +31,14 @@ const env = (key: string, fallback?: string): string => {
 };
 
 const SF = {
-  loginUrl: env("SF_LOGIN_URL"),                 // https://<mydomain>.my.salesforce.com
+  loginUrl: env("SF_LOGIN_URL"),                 // https://login.salesforce.com (or test.salesforce.com for sandbox)
   clientId: env("SF_CLIENT_ID"),                 // Consumer Key of the External Client App / Connected App
   clientSecret: process.env.SF_CLIENT_SECRET ?? "",   // client_credentials mode only
   authMode: env("SF_AUTH_MODE", "jwt"),          // "jwt" (certificate, Shashank's setup) or "client_credentials"
   username: process.env.SF_USERNAME ?? "",       // jwt: integration user, e.g. BTPIntegration@globalco.sf
-  privateKey: (process.env.SF_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"), // jwt: contents of private.key (PEM)
+  privateKey: process.env.SF_PRIVATE_KEY_PATH
+  ? readFileSync(process.env.SF_PRIVATE_KEY_PATH, "utf8")
+  : (process.env.SF_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"), // jwt: contents of private.key (PEM)
   apiVersion: env("SF_API_VERSION", "v62.0"),    // any current version works
   statusField: env("SF_STATUS_FIELD", "Staffing_Status__c"), // TODO: confirm API name of the custom field
 };
