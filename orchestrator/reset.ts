@@ -25,7 +25,7 @@ const F_AVAIL = process.env.SFSF_FIELD_AVAILABILITY ?? "cust_availability";
 const F_CONSULTANT = process.env.SFSF_FIELD_CONSULTANT ?? "cust_consultant";
 
 // demo data sheet: skills fit -> availability
-const TARGET_BY_FIT: Record<string, number> = { "95": 100, "92": 100, "88": 80, "97": 60, "84": 100 };
+const TARGET_BY_FIT: Record<string, number> = { "95": 100, "92": 100, "88": 80, "97": 60, "84": 100, "94": 100, "91": 100, "89": 100, "86": 40, "82": 100, "78": 60 };
 
 const login = USER.includes("@") ? USER : `${USER}@${COMPANY}`;
 const auth = "Basic " + Buffer.from(`${login}:${PASS}`).toString("base64");

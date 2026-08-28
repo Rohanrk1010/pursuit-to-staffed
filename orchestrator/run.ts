@@ -1,6 +1,9 @@
 /**
  * run.ts — the Pursuit-to-Staffed orchestrator. One file, six steps.
  *
+ * v2 (Fri 28 Aug): approver name recorded (from approval.ts v2), "done" confirmation posted back to Teams,
+ * before/after snapshot in the trace, and a live business view at http://localhost:3001/live
+ *
  *   1 TRIGGER      Salesforce Opportunity_Won__e event  -> get_opportunity        (salesforce-mcp)
  *   2 ENGAGEMENT   create_engagement                                              (sap-engagement-mcp)
  *   3 INTEL        check_availability -> proposeTeam (Azure OpenAI, drafts only)  (workforce-mcp + propose.ts)
@@ -26,7 +29,7 @@ import Faye from "faye";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { proposeTeam, usage as llmUsage, estimatedCostUsd, type Opportunity, type Consultant, type Proposal } from "./propose";
-import { requestApproval } from "./approval";
+import { requestApproval, postTeamsMessage, type ApprovalResult } from "./approval";
 
 // ---------------------------------------------------------------------------
 // config
@@ -42,14 +45,15 @@ const MCP = {
   workforce: { url: env("MCP_WORKFORCE_URL", "http://localhost:8083/mcp"), token: process.env.MCP_WORKFORCE_TOKEN ?? env("MCP_TOKEN") },
 };
 const TRACE_PORT = Number(process.env.TRACE_PORT ?? 3001);
-const APPROVER = process.env.APPROVER_NAME ?? "Staffing Manager (Teams)";
+const APPROVER_FALLBACK = process.env.APPROVER_NAME ?? "Staffing Manager (Teams)";
 const RUNS_DIR = path.join(process.cwd(), "runs");
 
 // ---------------------------------------------------------------------------
 // trace / run state (step 6 lives here, updated after every step)
 // ---------------------------------------------------------------------------
 type Step = { n: number; name: string; status: "running" | "ok" | "failed" | "skipped"; startedAt: string; ms?: number; input?: unknown; output?: unknown; error?: string };
-type Run = { runId: string; startedAt: string; finishedAt?: string; status: "running" | "approved" | "rejected" | "failed" | "partial"; opportunityId?: string; engagementId?: string; steps: Step[]; summary?: Record<string, unknown> };
+type Snapshot = { opportunity: string; engagement: string; availability: Record<string, number>; assignments?: string };
+type Run = { runId: string; startedAt: string; finishedAt?: string; status: "running" | "approved" | "rejected" | "failed" | "partial"; opportunityId?: string; opportunityName?: string; engagementId?: string; decidedBy?: string; decidedAt?: string; steps: Step[]; before?: Snapshot; after?: Snapshot; summary?: Record<string, unknown> };
 
 const runs = new Map<string, Run>();
 const save = (run: Run) => {
@@ -175,6 +179,7 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       teamSize: Number(opp.teamSize ?? 4),
     };
     const endDate = plusSixMonths(opportunity.startDate);
+    run.opportunityName = opportunity.name;
 
     // 2 — engagement in S/4
     const engagementId = newEngagementId(run.runId);
@@ -206,6 +211,13 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       skills: c.skills ?? [],
     }));
     if (consultants.length === 0) throw new Error("no consultants returned by check_availability — has the SuccessFactors data been reset?");
+    run.before = {
+      opportunity: `${opp.stage ?? "?"} · staffing status ${opp.staffingStatus ?? "empty"}`,
+      engagement: "none",
+      availability: Object.fromEntries(consultants.map((c) => [c.name ?? c.userId, c.availablePct])),
+      assignments: "none for this engagement",
+    };
+    save(run);
 
     const tokensBefore = { in: llmUsage.promptTokens, out: llmUsage.completionTokens };
     const proposal: Proposal = await step(run, trace, 3, "intel.propose_team (AI draft)", { consultants: consultants.length }, async () => {
@@ -214,10 +226,15 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
     });
 
     // 4 — human gate in Teams
-    const decision = await step(run, trace, 4, "human.approval (Teams)", { team: proposal.team.map((m) => m.name) }, () =>
+    const approval: ApprovalResult = await step(run, trace, 4, "human.approval (Teams)", { team: proposal.team.map((m) => m.name) }, () =>
       requestApproval(run.runId, opportunity, proposal),
     );
-    const decidedAt = new Date().toISOString();
+    const decision = approval.decision;
+    const decidedAt = approval.at;
+    const APPROVER = approval.by || APPROVER_FALLBACK;
+    run.decidedBy = APPROVER;
+    run.decidedAt = decidedAt;
+    save(run);
 
     if (decision !== "approve") {
       run.status = "rejected";
@@ -257,6 +274,32 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       ]);
       const failed = results.filter((r) => r.status === "rejected").length;
       run.status = failed ? "partial" : "approved";
+
+      // after snapshot: read the systems again (real values, not assumed)
+      try {
+        const [oppAfter, availAfter] = await Promise.all([
+          callTool(MCP.salesforce, "get_opportunity", { opportunityId }),
+          callTool(MCP.workforce, "check_availability", { requiredSkills: opportunity.requiredSkills, startDate: opportunity.startDate, endDate }),
+        ]);
+        const staffed = results[0].status === "fulfilled" ? (results[0].value as any)?.assignmentsCreated ?? team.length : 0;
+        run.after = {
+          opportunity: `${oppAfter.stage ?? "?"} · staffing status ${oppAfter.staffingStatus ?? "empty"} · Chatter posted`,
+          engagement: `${engagementId} · ${results[1].status === "fulfilled" ? "STAFFED" : "status update failed"}`,
+          availability: Object.fromEntries((availAfter.consultants ?? []).map((c: any) => [c.name ?? c.userId, Number(c.availablePct ?? 0)])),
+          assignments: `${staffed} rows in SuccessFactors for ${engagementId}`,
+        };
+      } catch (e) {
+        console.log("after-snapshot skipped:", e instanceof Error ? e.message : e);
+      }
+
+      // confirmation back into the Teams channel
+      const secs = Math.round((Date.now() - t0) / 10) / 100;
+      await postTeamsMessage(
+        failed
+          ? `⚠️ Completed with ${failed} failed write-back(s) — see the trace for details.`
+          : `🎉 Done in ${secs}s. ${team.length} assignments written in SuccessFactors · project ${engagementId} marked STAFFED in S/4 · Salesforce opportunity set to Staffed with a Chatter post. Approved by ${APPROVER}.`,
+        `${opportunity.name} · run ${run.runId}`,
+      ).catch((e) => console.log("could not post done message to Teams:", e instanceof Error ? e.message : e));
     }
 
     // 6 — governance
@@ -269,6 +312,8 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       teamProposed: proposal.team.map((m) => `${m.name} ${m.allocationPct}%`),
       tradeoffFlags: proposal.tradeoffFlags,
       decision,
+      decidedBy: run.decidedBy,
+      decidedAt: run.decidedAt,
       llmTokens: { in: llmUsage.promptTokens - tokensBefore.in, out: llmUsage.completionTokens - tokensBefore.out },
       llmCostUsd: estimatedCostUsd(),
       totalSeconds: Math.round((Date.now() - t0) / 10) / 100,
@@ -293,6 +338,70 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
 // ---------------------------------------------------------------------------
 // trace viewer — http://localhost:3001/trace/<runId>  and  /runs
 // ---------------------------------------------------------------------------
+function beforeAfter(run: Run): string {
+  if (!run.before) return "";
+  const esc2 = (s: unknown) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  const names = Array.from(new Set([...Object.keys(run.before.availability), ...Object.keys(run.after?.availability ?? {})]));
+  const rows = names.map((n) => `<tr><td>${esc2(n)}</td><td>${run.before!.availability[n] ?? ""}%</td><td>${run.after ? `${run.after.availability[n] ?? ""}%` : "—"}</td></tr>`).join("");
+  return `<h2>before / after</h2><table><tr><th></th><th>before</th><th>after</th></tr>
+<tr><td>Salesforce opportunity</td><td>${esc2(run.before.opportunity)}</td><td>${esc2(run.after?.opportunity ?? "—")}</td></tr>
+<tr><td>S/4 engagement</td><td>${esc2(run.before.engagement)}</td><td>${esc2(run.after?.engagement ?? "—")}</td></tr>
+<tr><td>SuccessFactors assignments</td><td>${esc2(run.before.assignments ?? "")}</td><td>${esc2(run.after?.assignments ?? "—")}</td></tr>
+<tr><th>consultant availability</th><th></th><th></th></tr>${rows}</table>`;
+}
+
+const LIVE_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Pursuit to Staffed — live</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
+header{padding:20px 32px;font-size:22px;font-weight:600;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between}
+#steps{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;padding:24px 32px}
+.step{background:#1e293b;border-radius:12px;padding:20px;min-height:120px;border:2px solid #334155;transition:all .3s}
+.step .n{font-size:13px;color:#94a3b8}.step .t{font-size:18px;font-weight:600;margin:6px 0}.step .s{font-size:14px;color:#94a3b8}
+.pending{opacity:.5}.running{border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.25)}.running .s{color:#f59e0b}
+.ok{border-color:#22c55e}.ok .s{color:#22c55e}.failed{border-color:#ef4444}.failed .s{color:#ef4444}.skipped{border-color:#64748b}
+#detail{padding:0 32px 32px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.card{background:#1e293b;border-radius:12px;padding:20px}.card h3{margin:0 0 12px;font-size:15px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+table{width:100%;border-collapse:collapse;font-size:15px}td,th{padding:6px 4px;text-align:left;border-bottom:1px solid #334155}
+.big{font-size:32px;font-weight:700}.muted{color:#94a3b8;font-size:14px}
+</style></head><body>
+<header><span>Pursuit to Staffed — live</span><span id="hdr" class="muted">waiting for a run…</span></header>
+<div id="steps"></div>
+<div id="detail"></div>
+<script>
+const PH=[[1,"Trigger","Salesforce"],[2,"Engagement","SAP S/4HANA"],[3,"Staffing intel","SuccessFactors + Azure OpenAI"],[4,"Human gate","Microsoft Teams"],[5,"Fan-out","SuccessFactors · S/4 · Salesforce"],[6,"Governance","Trace"]];
+const DOING={1:"reading the won opportunity from Salesforce…",2:"creating the project in S/4…",3:"checking availability in SuccessFactors, AI drafting the team…",4:"waiting for the manager's decision in Teams…",5:"writing to SuccessFactors, S/4 and Salesforce…",6:"finalizing the audit trace…"};
+const DONE={1:"opportunity read from Salesforce",2:"project created in S/4",3:"AI proposal drafted from SuccessFactors data",4:"decision received in Teams",5:"all three systems updated",6:"trace recorded"};
+const need={1:1,2:1,3:2,4:1,5:4,6:0};
+function phase(run,n){
+  if(n===6){ if(!run.finishedAt) return run.steps.length?"running":"pending"; return run.status==="failed"?"failed":"ok"; }
+  const st=run.steps.filter(s=>s.n===n);
+  if(st.some(s=>s.status==="failed")) return "failed";
+  if(st.some(s=>s.status==="skipped")) return "skipped";
+  if(st.some(s=>s.status==="running")) return "running";
+  if(st.length>=need[n]&&st.every(s=>s.status==="ok")) return "ok";
+  return st.length?"running":"pending";
+}
+function ms(run,n){const st=run.steps.filter(s=>s.n===n&&s.ms);return st.length?Math.max(...st.map(s=>s.ms))+" ms":"";}
+function render(run){
+  if(!run){document.getElementById("hdr").textContent="waiting for a run…";return;}
+  document.getElementById("hdr").textContent=(run.opportunityName||run.opportunityId||"")+" · "+run.runId+" · "+run.status.toUpperCase();
+  document.getElementById("steps").innerHTML=PH.map(([n,t,sys])=>{const p=phase(run,n);const label=p==="running"?DOING[n]:p==="ok"?DONE[n]+" · "+ms(run,n):p==="failed"?"failed":p==="skipped"?"skipped":"waiting";return '<div class="step '+p+'"><div class="n">STEP '+n+' · '+sys+'</div><div class="t">'+t+'</div><div class="s">'+label+'</div></div>';}).join("");
+  const prop=run.steps.find(s=>s.name&&s.name.indexOf("propose_team")>-1&&s.output);
+  let left="";
+  if(prop){const o=prop.output;left='<div class="card"><h3>AI proposal (draft)</h3><table>'+(o.team||[]).map(m=>'<tr><td>'+m.name+'</td><td>'+m.role+'</td><td>fit '+m.skillsFit+'</td><td>'+m.allocationPct+'%</td></tr>').join("")+'</table><p>'+(o.rationale||"")+'</p>'+(o.tradeoffFlags||[]).map(f=>'<p>⚠️ '+f+'</p>').join("")+'</div>';}
+  else left='<div class="card"><h3>AI proposal (draft)</h3><p class="muted">not yet</p></div>';
+  let right='<div class="card"><h3>Decision & result</h3>';
+  if(run.decidedBy) right+='<p class="big">'+(run.status==="rejected"?"❌ Rejected":"✅ Approved")+'</p><p>by '+run.decidedBy+'<br><span class="muted">'+run.decidedAt+'</span></p>';
+  else right+='<p class="muted">waiting for the human decision</p>';
+  if(run.after){const b=run.before||{},a=run.after;right+='<table><tr><th></th><th>before</th><th>after</th></tr><tr><td>Salesforce</td><td>'+(b.opportunity||"")+'</td><td>'+a.opportunity+'</td></tr><tr><td>S/4</td><td>'+(b.engagement||"")+'</td><td>'+a.engagement+'</td></tr><tr><td>SuccessFactors</td><td>'+(b.assignments||"")+'</td><td>'+a.assignments+'</td></tr>'+Object.keys(a.availability||{}).map(k=>'<tr><td>'+k+'</td><td>'+((b.availability||{})[k]??"")+'%</td><td>'+a.availability[k]+'%</td></tr>').join("")+'</table>';}
+  if(run.summary&&run.summary.totalSeconds) right+='<p class="big">'+run.summary.totalSeconds+' s</p><p class="muted">end to end · tokens '+JSON.stringify(run.summary.llmTokens||{})+' · est. $'+run.summary.llmCostUsd+'</p>';
+  right+='</div>';
+  document.getElementById("detail").innerHTML=left+right;
+}
+async function tick(){try{const r=await fetch("/latest.json",{cache:"no-store"});render(await r.json());}catch(e){}}
+tick();setInterval(tick,1000);
+</script></body></html>`;
+
 function startTraceServer() {
   const esc = (s: unknown) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
   const page = (title: string, body: string) =>
@@ -323,9 +432,20 @@ function startTraceServer() {
         return res.end(
           page(
             run.runId,
-            `<h1>Pursuit to Staffed — ${esc(run.runId)} <span class="${run.status}">${esc(run.status)}</span></h1><p>started ${esc(run.startedAt)} · finished ${esc(run.finishedAt ?? "—")} · opportunity ${esc(run.opportunityId ?? "")} · engagement ${esc(run.engagementId ?? "")}</p><table><tr><th>#</th><th>step</th><th>status</th><th>ms</th><th>detail</th></tr>${rows}</table>${run.summary ? `<h2>summary</h2><pre>${esc(JSON.stringify(run.summary, null, 2))}</pre>` : ""}<p><a href="/trace/${esc(run.runId)}.json">json</a> · <a href="/runs">all runs</a></p>`,
+            `<h1>Pursuit to Staffed — ${esc(run.runId)} <span class="${run.status}">${esc(run.status)}</span></h1><p>started ${esc(run.startedAt)} · finished ${esc(run.finishedAt ?? "—")} · opportunity ${esc(run.opportunityId ?? "")} · engagement ${esc(run.engagementId ?? "")}</p><table><tr><th>#</th><th>step</th><th>status</th><th>ms</th><th>detail</th></tr>${rows}</table>${beforeAfter(run)}${run.summary ? `<h2>summary</h2><pre>${esc(JSON.stringify(run.summary, null, 2))}</pre>` : ""}<p><a href="/trace/${esc(run.runId)}.json">json</a> · <a href="/runs">all runs</a> · <a href="/live">live view</a></p>`,
           ),
         );
+      }
+      if (url.pathname === "/latest.json") {
+        const files = existsSync(RUNS_DIR) ? readdirSync(RUNS_DIR).filter((f) => f.endsWith(".json")).sort().reverse() : [];
+        const latestId = [...runs.keys()].sort().reverse()[0] ?? files[0]?.replace(".json", "");
+        const run = latestId ? runs.get(latestId) ?? JSON.parse(readFileSync(path.join(RUNS_DIR, `${latestId}.json`), "utf8")) : null;
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        return res.end(JSON.stringify(run));
+      }
+      if (url.pathname === "/live") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        return res.end(LIVE_PAGE);
       }
       if (url.pathname === "/runs" || url.pathname === "/") {
         const files = existsSync(RUNS_DIR) ? readdirSync(RUNS_DIR).filter((f) => f.endsWith(".json")).sort().reverse() : [];
