@@ -1,0 +1,495 @@
+{
+  "runId": "RUN20260828141534",
+  "startedAt": "2026-08-28T08:45:34.513Z",
+  "status": "approved",
+  "opportunityId": "006aj00000caWBZAA2",
+  "steps": [
+    {
+      "n": 1,
+      "name": "trigger.get_opportunity",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:45:34.517Z",
+      "input": {
+        "opportunityId": "006aj00000caWBZAA2",
+        "eventPayload": {
+          "CurrencyIsoCode__c": "",
+          "CreatedById": "005aj00000c4JdNAAU",
+          "Amount__c": 2400000,
+          "CreatedDate": "2026-08-28T08:45:35.494Z",
+          "OpportunityName__c": "Falcon 15",
+          "StartDate__c": "2026-09-01",
+          "RequiredSkills__c": "S/4 Finance;BTP CAP;Data Eng",
+          "OpportunityId__c": "006aj00000caWBZAA2",
+          "TeamSize__c": 4,
+          "AccountName__c": "GlobalCo Financial"
+        }
+      },
+      "ms": 601,
+      "output": {
+        "opportunityId": "006aj00000caWBZAA2",
+        "name": "Falcon 15",
+        "accountName": "GlobalCo Financial",
+        "amount": 2400000,
+        "currency": "USD",
+        "closeDate": "2026-08-21",
+        "stage": "Closed Won",
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "teamSize": 4,
+        "staffingStatus": null
+      }
+    },
+    {
+      "n": 2,
+      "name": "engagement.create_engagement",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:45:35.124Z",
+      "input": {
+        "engagementId": "ENG20260828141534"
+      },
+      "ms": 2688,
+      "output": {
+        "engagementId": "ENG20260828141534",
+        "status": "CREATED",
+        "staffingStatus": "Awaiting assignment",
+        "wbsElement": "ENG20260828141534.001",
+        "sourceOpportunityId": "006aj00000caWBZAA2",
+        "fioriUrl": "https://my414806.s4hana.cloud.sap/ui#EnterpriseProject-display&/EnterpriseProject(Project='ENG20260828141534')"
+      }
+    },
+    {
+      "n": 3,
+      "name": "intel.check_availability",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:45:37.815Z",
+      "input": {
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "endDate": "2027-02-28"
+      },
+      "ms": 2260,
+      "output": {
+        "requiredSkills": [
+          "S/4 Finance",
+          "BTP CAP",
+          "Data Eng"
+        ],
+        "startDate": "2026-09-01",
+        "endDate": "2027-02-28",
+        "consultants": [
+          {
+            "userId": "103420",
+            "name": "LINDQVIST T",
+            "role": "ARCHITECT",
+            "skillsFit": 97,
+            "availablePct": 60,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103417",
+            "name": "A MEHTA",
+            "role": "ENG_MANAGER",
+            "skillsFit": 95,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "extuser1",
+            "name": "Иван  Аксенов",
+            "role": "ARCHITECT",
+            "skillsFit": 94,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "103418",
+            "name": "SILVA R.",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 92,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "extuser320",
+            "name": "Jonathon Roberts",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 91,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "107016",
+            "name": "Silvia Deng",
+            "role": "ENG_MANAGER",
+            "skillsFit": 89,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "103419",
+            "name": "OKAFOR J",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 88,
+            "availablePct": 80,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "107025",
+            "name": "Xiaoye Tian",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 86,
+            "availablePct": 40,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          },
+          {
+            "userId": "103421",
+            "name": "NAIR P",
+            "role": "ANALYST",
+            "skillsFit": 84,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "106076",
+            "name": "Ian Bromby",
+            "role": "ANALYST",
+            "skillsFit": 82,
+            "availablePct": 100,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": []
+          },
+          {
+            "userId": "106077",
+            "name": "Andrew Williams",
+            "role": "ANALYST",
+            "skillsFit": 78,
+            "availablePct": 60,
+            "skills": [
+              "S/4 Finance",
+              "BTP CAP",
+              "Data Eng"
+            ],
+            "availableFrom": "2026-09-01",
+            "availableTo": "2027-02-28",
+            "flags": [
+              "partial_availability"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "n": 3,
+      "name": "intel.propose_team (AI draft)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:45:40.084Z",
+      "input": {
+        "consultants": 11
+      },
+      "ms": 4703,
+      "output": {
+        "team": [
+          {
+            "userId": "103417",
+            "name": "A MEHTA",
+            "role": "ENG_MANAGER",
+            "skillsFit": 95,
+            "availablePct": 100,
+            "allocationPct": 100,
+            "reason": "Top skills fit and full availability."
+          },
+          {
+            "userId": "extuser1",
+            "name": "Иван  Аксенов",
+            "role": "ARCHITECT",
+            "skillsFit": 94,
+            "availablePct": 100,
+            "allocationPct": 100,
+            "reason": "High skills fit and full availability."
+          },
+          {
+            "userId": "103418",
+            "name": "SILVA R.",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 92,
+            "availablePct": 100,
+            "allocationPct": 100,
+            "reason": "Strong skills fit and full availability."
+          },
+          {
+            "userId": "extuser320",
+            "name": "Jonathon Roberts",
+            "role": "SR_CONSULTANT",
+            "skillsFit": 91,
+            "availablePct": 100,
+            "allocationPct": 100,
+            "reason": "Good skills fit and full availability."
+          }
+        ],
+        "rationale": "The selected team members have the highest skills fit and full availability, ensuring optimal alignment with the project's requirements.",
+        "tradeoffFlags": [
+          "LINDQVIST T (skillsFit: 97, availablePct: 60) was not selected due to limited availability; A MEHTA (skillsFit: 95, availablePct: 100) was chosen instead."
+        ],
+        "tokens": {
+          "in": 728,
+          "out": 374
+        }
+      }
+    },
+    {
+      "n": 4,
+      "name": "human.approval (Teams)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:45:44.791Z",
+      "input": {
+        "team": [
+          "A MEHTA",
+          "Иван  Аксенов",
+          "SILVA R.",
+          "Jonathon Roberts"
+        ]
+      },
+      "ms": 55738,
+      "output": {
+        "decision": "approve",
+        "by": "Shivani (verified)",
+        "at": "2026-08-28T08:46:39.639Z"
+      }
+    },
+    {
+      "n": 5,
+      "name": "fanout.staff_team (SuccessFactors)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:46:40.533Z",
+      "input": {
+        "engagementId": "ENG20260828141534"
+      },
+      "ms": 8507,
+      "output": {
+        "engagementId": "ENG20260828141534",
+        "assignmentsCreated": 4,
+        "assignments": [
+          {
+            "userId": "103417",
+            "assignmentId": "cust_ConsultantAssignment/externalCode=647111",
+            "utilizationPct": 100
+          },
+          {
+            "userId": "extuser1",
+            "assignmentId": "cust_ConsultantAssignment/externalCode=647112",
+            "utilizationPct": 100
+          },
+          {
+            "userId": "103418",
+            "assignmentId": "cust_ConsultantAssignment/externalCode=647113",
+            "utilizationPct": 100
+          },
+          {
+            "userId": "extuser320",
+            "assignmentId": "cust_ConsultantAssignment/externalCode=647114",
+            "utilizationPct": 100
+          }
+        ],
+        "approvedBy": "Shivani (verified)",
+        "staffedAt": "2026-08-28T08:46:49.039Z"
+      }
+    },
+    {
+      "n": 5,
+      "name": "fanout.confirm_staffing (S/4)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:46:40.535Z",
+      "input": {
+        "engagementId": "ENG20260828141534"
+      },
+      "ms": 2374,
+      "output": {
+        "engagementId": "ENG20260828141534",
+        "staffingStatus": "STAFFED",
+        "teamSize": 4,
+        "confirmedBy": "Shivani (verified)",
+        "confirmedAt": "2026-08-28T08:46:39.639Z",
+        "fioriUrl": "https://my414806.s4hana.cloud.sap/ui#EnterpriseProject-display&/EnterpriseProject(Project='ENG20260828141534')"
+      }
+    },
+    {
+      "n": 5,
+      "name": "fanout.update_opportunity_status (Salesforce)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:46:40.539Z",
+      "input": {
+        "opportunityId": "006aj00000caWBZAA2"
+      },
+      "ms": 788,
+      "output": {
+        "opportunityId": "006aj00000caWBZAA2",
+        "field": "Staffing_Status__c",
+        "status": "Staffed",
+        "updatedAt": "2026-08-28T08:46:41.328Z"
+      }
+    },
+    {
+      "n": 5,
+      "name": "fanout.post_chatter_update (Salesforce)",
+      "status": "ok",
+      "startedAt": "2026-08-28T08:46:40.542Z",
+      "input": {
+        "opportunityId": "006aj00000caWBZAA2"
+      },
+      "ms": 955,
+      "output": {
+        "feedItemId": "0D5aj000010jpDxCAI",
+        "opportunityId": "006aj00000caWBZAA2",
+        "text": "Staffing confirmed — team of 4 (A MEHTA, Иван  Аксенов, SILVA R., Jonathon Roberts). Engagement ENG20260828141534, start 2026-09-01. Approved by Shivani (verified) via Teams.",
+        "url": "https://orgfarm-27dfc46293-dev-ed.develop.my.salesforce.com/006aj00000caWBZAA2",
+        "postedAt": "2026-08-28T08:46:41.498Z"
+      }
+    }
+  ],
+  "opportunityName": "Falcon 15",
+  "engagementId": "ENG20260828141534",
+  "before": {
+    "opportunity": "Closed Won · staffing status empty",
+    "engagement": "none",
+    "availability": {
+      "LINDQVIST T": 60,
+      "A MEHTA": 100,
+      "Иван  Аксенов": 100,
+      "SILVA R.": 100,
+      "Jonathon Roberts": 100,
+      "Silvia Deng": 100,
+      "OKAFOR J": 80,
+      "Xiaoye Tian": 40,
+      "NAIR P": 100,
+      "Ian Bromby": 100,
+      "Andrew Williams": 60
+    },
+    "assignments": "none for this engagement"
+  },
+  "decidedBy": "Shivani (verified)",
+  "decidedAt": "2026-08-28T08:46:39.639Z",
+  "after": {
+    "opportunity": "Closed Won · staffing status Staffed · Chatter posted",
+    "engagement": "ENG20260828141534 · STAFFED",
+    "availability": {
+      "LINDQVIST T": 60,
+      "A MEHTA": 0,
+      "Иван  Аксенов": 0,
+      "SILVA R.": 0,
+      "Jonathon Roberts": 0,
+      "Silvia Deng": 100,
+      "OKAFOR J": 80,
+      "Xiaoye Tian": 40,
+      "NAIR P": 100,
+      "Ian Bromby": 100,
+      "Andrew Williams": 60
+    },
+    "assignments": "4 rows in SuccessFactors for ENG20260828141534"
+  },
+  "finishedAt": "2026-08-28T08:46:51.997Z",
+  "summary": {
+    "opportunity": "Falcon 15 (006aj00000caWBZAA2)",
+    "engagement": "ENG20260828141534",
+    "fioriUrl": "https://my414806.s4hana.cloud.sap/ui#EnterpriseProject-display&/EnterpriseProject(Project='ENG20260828141534')",
+    "consultantsConsidered": 11,
+    "teamProposed": [
+      "A MEHTA 100%",
+      "Иван  Аксенов 100%",
+      "SILVA R. 100%",
+      "Jonathon Roberts 100%"
+    ],
+    "tradeoffFlags": [
+      "LINDQVIST T (skillsFit: 97, availablePct: 60) was not selected due to limited availability; A MEHTA (skillsFit: 95, availablePct: 100) was chosen instead."
+    ],
+    "decision": "approve",
+    "decidedBy": "Shivani (verified)",
+    "decidedAt": "2026-08-28T08:46:39.639Z",
+    "llmTokens": {
+      "in": 728,
+      "out": 374
+    },
+    "llmCostUsd": 0.0003,
+    "totalSeconds": 77.48
+  }
+}

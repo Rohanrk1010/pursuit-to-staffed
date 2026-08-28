@@ -28,7 +28,7 @@ import path from "node:path";
 import Faye from "faye";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { proposeTeam, usage as llmUsage, estimatedCostUsd, type Opportunity, type Consultant, type Proposal } from "./propose";
+import { proposeTeam, reviseTeam, usage as llmUsage, estimatedCostUsd, type Opportunity, type Consultant, type Proposal } from "./propose";
 import { requestApproval, postTeamsMessage, type ApprovalResult } from "./approval";
 
 // ---------------------------------------------------------------------------
@@ -226,9 +226,24 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
     });
 
     // 4 — human gate in Teams
-    const approval: ApprovalResult = await step(run, trace, 4, "human.approval (Teams)", { team: proposal.team.map((m) => m.name) }, () =>
-      requestApproval(run.runId, opportunity, proposal),
+    let activeProposal: Proposal = proposal;
+    let approval: ApprovalResult = await step(run, trace, 4, "human.approval (Teams)", { team: activeProposal.team.map((m) => m.name) }, () =>
+      requestApproval(run.runId, opportunity, activeProposal),
     );
+    // Modify loop: manager's plain-English change -> AI revises -> fresh approval (max 3 rounds)
+    let round = 0;
+    while (approval.decision === "modify" && round < 3) {
+      round += 1;
+      const instruction = approval.instruction ?? "";
+      const revised: Proposal = await step(run, trace, 4, `intel.revise_team (AI, round ${round})`, { instruction }, () =>
+        reviseTeam(opportunity, consultants, activeProposal, instruction),
+      );
+      activeProposal = revised;
+      approval = await step(run, trace, 4, `human.approval (Teams, revised ${round})`, { team: activeProposal.team.map((m) => m.name) }, () =>
+        requestApproval(run.runId, opportunity, activeProposal, 15 * 60 * 1000, true),
+      );
+    }
+    const proposalFinal = activeProposal;
     const decision = approval.decision;
     const decidedAt = approval.at;
     const APPROVER = approval.by || APPROVER_FALLBACK;
@@ -242,7 +257,7 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       console.log("\nrejected by the human — no writes made.");
     } else {
       // 5 — fan-out, all four write-backs in parallel, only after approval
-      const team = proposal.team;
+      const team = proposalFinal.team;
       const names = team.map((m) => m.name).join(", ");
       const results = await Promise.allSettled([
         step(run, trace, 5, "fanout.staff_team (SuccessFactors)", { engagementId }, () =>
@@ -309,7 +324,7 @@ export async function runFlow(opportunityId: string, eventPayload?: unknown): Pr
       engagement: engagementId,
       fioriUrl: engagement.fioriUrl,
       consultantsConsidered: consultants.length,
-      teamProposed: proposal.team.map((m) => `${m.name} ${m.allocationPct}%`),
+      teamProposed: proposalFinal.team.map((m) => `${m.name} ${m.allocationPct}%`),
       tradeoffFlags: proposal.tradeoffFlags,
       decision,
       decidedBy: run.decidedBy,
